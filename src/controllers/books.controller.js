@@ -1,58 +1,208 @@
-import {
-  books,
-  findBookById,
-  addBook,
-  updateBook,
-  removeBook
-} from "../data/books.js";
 
-export function list(req, res) {
-  res.json({
-    count: books.length,//массив дотор хэдэн ном байгааг тоолно.
-    data: books//бүх номын мэдээллийг буцаана.
+
+import { prisma } from "../db.js";
+
+// 1. GET /books - Бүх номыг зохиогчтой нь авах
+export async function list(req, res) {
+  const books = await prisma.book.findMany({
+    include: { author: true }
+  });
+
+  return res.status(200).json({
+    count: books.length,
+    data: books
   });
 }
 
-export function getOne(req, res) {
+// 2. GET /books/search?q= - Ном хайх
+export async function search(req, res) {
+  const q = String(req.query.q || "");
+
+  const books = await prisma.book.findMany({
+    where: {
+      title: {
+        contains: q,
+        mode: "insensitive"
+      }
+    },
+    include: { author: true }
+  });
+
+  return res.status(200).json({
+    count: books.length,
+    data: books
+  });
+}
+
+// 3. GET /books/:id - Нэг ном авах
+export async function getOne(req, res) {
   const id = Number(req.params.id);
-  const book = findBookById(id);
+
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({
+      message: "Invalid book ID"
+    });
+  }
+
+  const book = await prisma.book.findUnique({
+    where: { id },
+    include: { author: true }
+  });
 
   if (!book) {
-    return res.status(404).json({ message: "Book not found" });
+    return res.status(404).json({
+      message: "Book not found"
+    });
   }
 
-  res.json(book);
+  return res.status(200).json(book);
 }
 
-export function create(req, res) {
-  const { title, price } = req.body;//салгаж авна.
+// 4. POST /books - Шинэ ном нэмэх
+export async function create(req, res) {
+  const { title, price, authorId } = req.body;
 
-  if (!title) {//нэр
-    return res.status(400).json({ message: "title is required" });
+  if (
+    typeof title !== "string" ||
+    !title.trim() ||
+    !Number.isInteger(price) ||
+    !Number.isInteger(authorId) ||
+    authorId <= 0
+  ) {
+    return res.status(400).json({
+      message: "Valid title, price and authorId are required"
+    });
   }
 
-  const book = addBook({ title, price });
-  res.status(201).json(book);
+  try {
+    const book = await prisma.book.create({
+      data: {
+        title: title.trim(),
+        price,
+        authorId
+      },
+      include: { author: true }
+    });
+
+    return res.status(201).json(book);
+  } catch (error) {
+    if (error.code === "P2003") {
+      return res.status(400).json({
+        message: "Зохиолч олдсонгүй"
+      });
+    }
+
+    throw error;
+  }
 }
 
-export function update(req, res) {
+// 5. PATCH /books/:id - Номын мэдээлэл өөрчлөх
+export async function update(req, res) {
   const id = Number(req.params.id);
-  const updated = updateBook(id, req.body);
 
-  if (!updated) {
-    return res.status(404).json({ message: "Book not found" });
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({
+      message: "Invalid book ID"
+    });
   }
 
-  res.json(updated);//ном олдоогүй эсэхийг шалгана.
+  const { title, price, isAvailable, authorId } = req.body;
+  const data = {};
+
+  if (title !== undefined) {
+    if (typeof title !== "string" || !title.trim()) {
+      return res.status(400).json({
+        message: "Invalid title"
+      });
+    }
+
+    data.title = title.trim();
+  }
+
+  if (price !== undefined) {
+    if (!Number.isInteger(price)) {
+      return res.status(400).json({
+        message: "Invalid price"
+      });
+    }
+
+    data.price = price;
+  }
+
+  if (isAvailable !== undefined) {
+    if (typeof isAvailable !== "boolean") {
+      return res.status(400).json({
+        message: "Invalid isAvailable"
+      });
+    }
+
+    data.isAvailable = isAvailable;
+  }
+
+  if (authorId !== undefined) {
+    if (!Number.isInteger(authorId) || authorId <= 0) {
+      return res.status(400).json({
+        message: "Invalid authorId"
+      });
+    }
+
+    data.authorId = authorId;
+  }
+
+  if (Object.keys(data).length === 0) {
+    return res.status(400).json({
+      message: "No valid fields to update"
+    });
+  }
+
+  try {
+    const book = await prisma.book.update({
+      where: { id },
+      data,
+      include: { author: true }
+    });
+
+    return res.status(200).json(book);
+  } catch (error) {
+    if (error.code === "P2025") {
+      return res.status(404).json({
+        message: "Book not found"
+      });
+    }
+
+    if (error.code === "P2003") {
+      return res.status(400).json({
+        message: "Зохиолч олдсонгүй"
+      });
+    }
+
+    throw error;
+  }
 }
 
-export function remove(req, res) {
+// 6. DELETE /books/:id - Ном устгах
+export async function remove(req, res) {
   const id = Number(req.params.id);
-  const ok = removeBook(id);
 
-  if (!ok) {
-    return res.status(404).json({ message: "Book not found" });
+  if (!Number.isInteger(id) || id <= 0) {
+    return res.status(400).json({
+      message: "Invalid book ID"
+    });
   }
 
-  res.status(204).send();
+  try {
+    await prisma.book.delete({
+      where: { id }
+    });
+
+    return res.status(204).end();
+  } catch (error) {
+    if (error.code === "P2025") {
+      return res.status(404).json({
+        message: "Book not found"
+      });
+    }
+
+    throw error;
+  }
 }
