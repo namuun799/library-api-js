@@ -24,3 +24,4 @@ model Book {
   authorId    Int
   author      Author @relation(fields: [authorId], references: [id])
 }
+
