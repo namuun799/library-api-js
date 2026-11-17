@@ -2,31 +2,79 @@
 import { prisma } from "../db.js";
 
 // ========================================
+// SEMINAR 10 - PAGINATION
+// page, limit, skip тооцоолох
+// ========================================
+function getPaging(query) {
+  const rawPage = Number(query.page);
+  const rawLimit = Number(query.limit);
+
+  const page =
+    Number.isInteger(rawPage) && rawPage > 0
+      ? rawPage
+      : 1;
+
+  const limit =
+    Number.isInteger(rawLimit) && rawLimit > 0
+      ? Math.min(50, rawLimit)
+      : 10;
+
+  const skip = (page - 1) * limit;
+
+  return { page, limit, skip };
+}
+
+// ========================================
 // 1. GET /authors
-// Бүх зохиолчийг авах + нэрээр хайх
-// SEMINAR 9: ?q=Сараа
+// SEMINAR 9 - Нэрээр хайх
+// SEMINAR 10 - Хуудаслалт
 // ========================================
 export async function getAuthors(req, res) {
   try {
     const q = String(req.query.q || "").trim();
 
-    const authors = await prisma.author.findMany({
-      where: q
-        ? {
-            name: {
-              contains: q,
-              mode: "insensitive"
-            }
+    const { page, limit, skip } = getPaging(req.query);
+
+    const where = q
+      ? {
+          name: {
+            contains: q,
+            mode: "insensitive"
           }
-        : {},
-      include: {
-        _count: {
-          select: { books: true }
         }
+      : {};
+
+    const [authors, total] = await Promise.all([
+      prisma.author.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { id: "asc" },
+        include: {
+          _count: {
+            select: { books: true }
+          }
+        }
+      }),
+
+      prisma.author.count({ where })
+    ]);
+
+    const pages = Math.ceil(total / limit);
+
+    
+    return res.status(200).json({
+      data: authors,
+      meta: {
+        page,
+        limit,
+        total,
+        pages,
+        hasNext: page < pages,
+        hasPrev: page > 1
       }
     });
 
-    return res.status(200).json(authors);
   } catch (error) {
     console.error(error);
 
@@ -89,6 +137,7 @@ export async function createAuthor(req, res) {
     });
 
     return res.status(201).json(author);
+
   } catch (error) {
     if (error.code === "P2002") {
       return res.status(409).json({
