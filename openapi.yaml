@@ -1,0 +1,224 @@
+openapi: 3.0.3
+info:
+  title: Library API
+  version: 1.0.0
+  description: BED411 номын сангийн API — Семинар 11
+servers:
+  - url: http://localhost:3001
+tags:
+  - name: Books
+    description: Номын үйлдлүүд
+  - name: Authors
+    description: Зохиолчийн үйлдлүүд
+paths:
+  /books:
+    get:
+      tags: [Books]
+      summary: Номын жагсаалт
+      description: Шүүлтүүр, эрэмбэлэлт, хуудаслалттай номын жагсаалт авах
+      parameters:
+        - name: page
+          in: query
+          description: Хуудасны дугаар
+          schema: { type: integer, default: 1, minimum: 1 }
+        - name: limit
+          in: query
+          description: Нэг хуудсанд харуулах номын тоо
+          schema: { type: integer, default: 10, minimum: 1, maximum: 50 }
+        - name: sort
+          in: query
+          description: Эрэмбэлэх талбар
+          schema: { type: string, enum: [title, price, createdAt], default: createdAt }
+        - name: order
+          in: query
+          description: Өсөх эсвэл буурах эрэмбэ
+          schema: { type: string, enum: [asc, desc], default: desc }
+        - name: q
+          in: query
+          description: Номын нэрээр хайх
+          schema: { type: string }
+        - name: authorId
+          in: query
+          description: Зохиолчийн ID-аар шүүх
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Номын жагсаалт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookList'
+        '400':
+          description: Буруу параметр
+    post:
+      tags: [Books]
+      summary: Ном нэмэх
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, price, authorId]
+              properties:
+                title: { type: string, example: 'JavaScript Basics' }
+                price: { type: integer, example: 35000 }
+                authorId: { type: integer, example: 1 }
+                isAvailable: { type: boolean, default: true }
+      responses:
+        '201':
+          description: Ном амжилттай үүссэн
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+        '400':
+          description: Буруу өгөгдөл
+  /books/{id}:
+    get:
+      tags: [Books]
+      summary: Нэг ном авах
+      parameters:
+        - $ref: '#/components/parameters/BookId'
+      responses:
+        '200':
+          description: Ном олдсон
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Book'
+        '404':
+          description: Ном олдсонгүй
+    patch:
+      tags: [Books]
+      summary: Номын мэдээлэл шинэчлэх
+      parameters:
+        - $ref: '#/components/parameters/BookId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title: { type: string }
+                price: { type: integer }
+                authorId: { type: integer }
+                isAvailable: { type: boolean }
+            example:
+              price: 45000
+      responses:
+        '200':
+          description: Ном шинэчлэгдсэн
+        '400':
+          description: Буруу өгөгдөл
+        '404':
+          description: Ном олдсонгүй
+    delete:
+      tags: [Books]
+      summary: Ном устгах
+      parameters:
+        - $ref: '#/components/parameters/BookId'
+      responses:
+        '204':
+          description: Ном амжилттай устсан; хариуны body байхгүй
+        '404':
+          description: Ном олдсонгүй
+  /authors:
+    get:
+      tags: [Authors]
+      summary: Зохиолчдын жагсаалт
+      parameters:
+        - name: q
+          in: query
+          description: Зохиолчийн нэрээр хайх
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1, minimum: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10, minimum: 1, maximum: 50 }
+      responses:
+        '200':
+          description: Зохиолчдын жагсаалт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorList'
+  /authors/{id}/books:
+    get:
+      tags: [Authors]
+      summary: Нэг зохиолчийн номууд
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Зохиолчийн номууд
+        '404':
+          description: Зохиолч олдсонгүй
+components:
+  parameters:
+    BookId:
+      name: id
+      in: path
+      required: true
+      description: Номын ID
+      schema: { type: integer, minimum: 1 }
+  schemas:
+    Author:
+      type: object
+      properties:
+        id: { type: integer, example: 8 }
+        name: { type: string, example: Болд }
+        email: { type: string, example: bold@mail.mn }
+    Book:
+      type: object
+      properties:
+        id: { type: integer, example: 25 }
+        title: { type: string, example: Node Streams }
+        price: { type: integer, example: 72000 }
+        isAvailable: { type: boolean, example: false }
+        createdAt: { type: string, format: date-time }
+        authorId: { type: integer, example: 8 }
+        author:
+          $ref: '#/components/schemas/Author'
+    PaginationMeta:
+      type: object
+      properties:
+        page: { type: integer, example: 1 }
+        limit: { type: integer, example: 5 }
+        total: { type: integer, example: 22 }
+        pages: { type: integer, example: 5 }
+        hasNext: { type: boolean, example: true }
+        hasPrev: { type: boolean, example: false }
+    BookList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Book'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+    AuthorWithCount:
+      allOf:
+        - $ref: '#/components/schemas/Author'
+        - type: object
+          properties:
+            _count:
+              type: object
+              properties:
+                books: { type: integer }
+    AuthorList:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthorWithCount'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
